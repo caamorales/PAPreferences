@@ -9,6 +9,8 @@
 #import <XCTest/XCTest.h>
 #import "PAPreferences.h"
 
+NSString * const RemappedTitleKey = @"KEY_TITLE";
+
 @interface MyPreferences : PAPreferences
 @property (nonatomic, assign) NSString *username;
 @property (nonatomic, assign) NSArray *kids;
@@ -22,6 +24,12 @@
 @property (nonatomic, assign) NSURL *site;
 @property (nonatomic, assign) NSURLConnection *connection;  // Invalid object type
 @property (nonatomic, retain) NSString *fruit;              // Invalid retain specifier
+@property (nonatomic, assign) NSString *title;
+@property (nonatomic, assign) NSDate *date;
+@property (nonatomic, assign) NSNumber *number;
+@property (nonatomic, assign) NSValue *value;
+
+@property (nonatomic, readonly, assign) NSString *nickname;
 @end
 
 @implementation MyPreferences
@@ -37,10 +45,26 @@
 @dynamic site;
 @dynamic connection;
 @dynamic fruit;
+@dynamic title;
+@dynamic number;
+@dynamic value;
+
+- (NSString *)nickname {
+    return self.username;
+}
+
++ (NSString *)defaultsKeyForPropertyName:(NSString *)name {
+    if ([name isEqualToString:@"title"]) {
+        return RemappedTitleKey;
+    }
+    return name;
+}
+
 @end
 
 @interface PAPreferencesTests : XCTestCase {
     BOOL _seenNotification;
+    NSString *_notificationChangedProperty;
 }
 
 @end
@@ -88,6 +112,13 @@
     NSData *data = [NSData dataWithBytes:"hello" length:5];
     prefs.data = data;
     XCTAssertEqualObjects(prefs.data, data);
+}
+
+- (void)testDateRetrieval {
+    MyPreferences *prefs = [MyPreferences sharedInstance];
+    NSDate *date = [NSDate date];
+    prefs.date = date;
+    XCTAssertEqualObjects(prefs.date, date);
 }
 
 - (void)testDictionaryPersistence {
@@ -149,10 +180,43 @@
     XCTAssertEqualObjects([[NSUserDefaults standardUserDefaults] objectForKey:@"username"], @"alice");
 }
 
+- (void)testDefaultsKeyForPropertyNamePersistence {
+    MyPreferences *prefs = [MyPreferences sharedInstance];
+    prefs.title = @"yesterday";
+    XCTAssertEqualObjects([[NSUserDefaults standardUserDefaults] objectForKey:RemappedTitleKey], @"yesterday");
+}
+
+- (void)testDefaultsKeyForPropertyNameRetrieval {
+    MyPreferences *prefs = [MyPreferences sharedInstance];
+    [[NSUserDefaults standardUserDefaults] setObject:@"yesterday" forKey:RemappedTitleKey];
+    XCTAssertEqualObjects(prefs.title, @"yesterday");
+}
+
 - (void)testStringRetrieval {
     MyPreferences *prefs = [MyPreferences sharedInstance];
     prefs.username = @"alice";
     XCTAssertEqualObjects(prefs.username, @"alice");
+}
+
+- (void)testAccessViaInstanceMethod {
+    MyPreferences *prefs = [MyPreferences sharedInstance];
+    [[NSUserDefaults standardUserDefaults] setObject:@"bob" forKey:@"username"];
+    XCTAssertEqualObjects(prefs.nickname, @"bob");
+}
+
+- (void)testNumberPersistence {
+     MyPreferences *prefs = [MyPreferences sharedInstance];
+    NSNumber *number = @(23);
+    prefs.number = number;
+    NSNumber *defaultsNumber = [[NSUserDefaults standardUserDefaults] objectForKey:@"number"];
+    XCTAssertEqualObjects(defaultsNumber, number);
+ }
+
+- (void)testNumberRetrieval {
+    MyPreferences *prefs = [MyPreferences sharedInstance];
+    NSNumber *number = @(23);
+    prefs.number = number;
+    XCTAssertEqualObjects(prefs.number, number);
 }
 
 - (void)testUrlPersistence {
@@ -166,6 +230,22 @@
     prefs.site = [NSURL URLWithString:@"http://apple.com"];
     XCTAssertEqualObjects(prefs.site, [NSURL URLWithString:@"http://apple.com"]);
 }
+
+- (void)testCodableObjectPersistence {
+    MyPreferences *prefs = [MyPreferences sharedInstance];
+    NSValue *value = [NSValue valueWithRange:NSMakeRange(0, 1)];
+    prefs.value = value;
+    NSData *data = [[NSUserDefaults standardUserDefaults] dataForKey:@"value"];
+    XCTAssertEqualObjects([NSKeyedUnarchiver unarchiveObjectWithData:data], value);
+}
+
+- (void)testCodableObjectRetrieval {
+    MyPreferences *prefs = [MyPreferences sharedInstance];
+    NSValue *value = [NSValue valueWithRange:NSMakeRange(0, 1)];
+    prefs.value = value;
+    XCTAssertEqualObjects(prefs.value, value);
+}
+
 
 - (void)testPropertyRemoval {
     MyPreferences *prefs = [MyPreferences sharedInstance];
@@ -220,8 +300,31 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
+- (void)testNotificationUserInfo {
+    _notificationChangedProperty = nil;
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleNotification:) name:PAPreferencesDidChangeNotification object:nil];
+    MyPreferences *prefs = [MyPreferences sharedInstance];
+    prefs.username = @"jack";
+    XCTAssertTrue([_notificationChangedProperty isEqualToString:@"username"]);
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)testAutoSynchronizeDefaultsOn {
+    MyPreferences *prefs = [MyPreferences sharedInstance];
+    XCTAssertTrue(prefs.shouldAutomaticallySynchronize);
+}
+
 - (void)handleNotification:(NSNotification *)notification {
     _seenNotification = YES;
+    _notificationChangedProperty = notification.userInfo[PAPreferencesChangedPropertyKey];
 }
+
+#if DEBUG
+- (void)testInvalidPropertyListPersistence {
+    MyPreferences *prefs = [MyPreferences sharedInstance];
+    NSValue *value = [NSValue valueWithRange:NSMakeRange(0, 1)];
+    XCTAssertThrowsSpecificNamed(prefs.address = @{@"dictKey": value}, NSException, NSInvalidArgumentException);
+}
+#endif
 
 @end

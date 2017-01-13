@@ -11,110 +11,163 @@
 #include <objc/runtime.h>
 
 NSString * const PAPreferencesDidChangeNotification = @"PAPreferencesDidChangeNotification";
+NSString * const PAPreferencesChangedPropertyKey = @"PAPreferencesChangedPropertyKey";
 
 static NSMutableDictionary *_dynamicProperties;
 
-BOOL paprefBoolGetter(id self, SEL _cmd) {
+
+NS_INLINE PAPropertyDescriptor * propertyDescriptorForSelector(SEL _cmd) {
     NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    return [[NSUserDefaults standardUserDefaults] boolForKey:propertyDescriptor.name];
+    PAPropertyDescriptor *descriptor = _dynamicProperties[selectorString];
+    
+    return descriptor;
+}
+
+NS_INLINE NSString * defaultsKeyForSelector(SEL _cmd) {
+    PAPropertyDescriptor *descriptor = propertyDescriptorForSelector(_cmd);
+    NSString *defaultsKey = descriptor.defaultsKey;
+    
+    return defaultsKey;
+}
+
+BOOL paprefBoolGetter(id self, SEL _cmd) {
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] boolForKey:defaultsKey];
 }
 
 void paprefBoolSetter(id self, SEL _cmd, BOOL value) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    [[NSUserDefaults standardUserDefaults] setBool:value forKey:propertyDescriptor.name];
-    [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    [[self userDefaults] setBool:value forKey:defaultsKey];
+    if ([self shouldAutomaticallySynchronize]) {
+        [self synchronize];
+    }
+    NSDictionary *userInfo = @{PAPreferencesChangedPropertyKey: defaultsKey};
+    [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self userInfo:userInfo];
 }
 
 double paprefDoubleGetter(id self, SEL _cmd) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    return [[NSUserDefaults standardUserDefaults] doubleForKey:propertyDescriptor.name];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] doubleForKey:defaultsKey];
 }
 
 void paprefDoubleSetter(id self, SEL _cmd, double value) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    [[NSUserDefaults standardUserDefaults] setDouble:value forKey:propertyDescriptor.name];
-    [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    [[self userDefaults] setDouble:value forKey:defaultsKey];
+    if ([self shouldAutomaticallySynchronize]) {
+        [self synchronize];
+    }
+    NSDictionary *userInfo = @{PAPreferencesChangedPropertyKey: defaultsKey};
+    [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self userInfo:userInfo];
 }
 
 float paprefFloatGetter(id self, SEL _cmd) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    return [[NSUserDefaults standardUserDefaults] floatForKey:propertyDescriptor.name];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] floatForKey:defaultsKey];
 }
 
 void paprefFloatSetter(id self, SEL _cmd, float value) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    [[NSUserDefaults standardUserDefaults] setFloat:value forKey:propertyDescriptor.name];
-    [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    [[self userDefaults] setFloat:value forKey:defaultsKey];
+    if ([self shouldAutomaticallySynchronize]) {
+        [self synchronize];
+    }
+    NSDictionary *userInfo = @{PAPreferencesChangedPropertyKey: defaultsKey};
+    [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self userInfo:userInfo];
 }
 
 NSInteger paprefIntegerGetter(id self, SEL _cmd) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    return [[NSUserDefaults standardUserDefaults] integerForKey:propertyDescriptor.name];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] integerForKey:defaultsKey];
 }
 
 void paprefIntegerSetter(id self, SEL _cmd, NSInteger value) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    [[NSUserDefaults standardUserDefaults] setInteger:value forKey:propertyDescriptor.name];
-    [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    [[self userDefaults] setInteger:value forKey:defaultsKey];
+    if ([self shouldAutomaticallySynchronize]) {
+        [self synchronize];
+    }
+    NSDictionary *userInfo = @{PAPreferencesChangedPropertyKey: defaultsKey};
+    [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self userInfo:userInfo];
 }
 
 id paprefObjectGetter(id self, SEL _cmd) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    return [[NSUserDefaults standardUserDefaults] objectForKey:propertyDescriptor.name];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] objectForKey:defaultsKey];
 }
 
 void paprefObjectSetter(id self, SEL _cmd, id value) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    [[NSUserDefaults standardUserDefaults] setObject:value forKey:propertyDescriptor.name];
-    [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self];
+#if DEBUG
+    if ((value != nil) &&
+        ![NSPropertyListSerialization propertyList:value
+                                  isValidForFormat:NSPropertyListBinaryFormat_v1_0]) {
+        // The specific format above is not particularly important.
+		[NSException raise:NSInvalidArgumentException
+					format:@"This object is not a valid plist: \n%@.", value];
+    }
+#endif
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    [[self userDefaults] setObject:value forKey:defaultsKey];
+    if ([self shouldAutomaticallySynchronize]) {
+        [self synchronize];
+    }
+    NSDictionary *userInfo = @{PAPreferencesChangedPropertyKey: defaultsKey};
+    [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self userInfo:userInfo];
 }
 
 NSURL *paprefURLGetter(id self, SEL _cmd) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    return [[NSUserDefaults standardUserDefaults] URLForKey:propertyDescriptor.name];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] URLForKey:defaultsKey];
 }
 
 void paprefURLSetter(id self, SEL _cmd, NSURL *value) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    [[NSUserDefaults standardUserDefaults] setURL:value forKey:propertyDescriptor.name];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    [[self userDefaults] setURL:value forKey:defaultsKey];
+    if ([self shouldAutomaticallySynchronize]) {
+        [self synchronize];
+    }
     [[NSNotificationCenter defaultCenter] postNotificationName:PAPreferencesDidChangeNotification object:self];
 }
 
 NSArray *paprefArrayGetter(id self, SEL _cmd) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    return [[NSUserDefaults standardUserDefaults] arrayForKey:propertyDescriptor.name];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] arrayForKey:defaultsKey];
 }
 
 NSDictionary *paprefDictionaryGetter(id self, SEL _cmd) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    return [[NSUserDefaults standardUserDefaults] dictionaryForKey:propertyDescriptor.name];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] dictionaryForKey:defaultsKey];
 }
 
 NSData *paprefDataGetter(id self, SEL _cmd) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    return [[NSUserDefaults standardUserDefaults] dataForKey:propertyDescriptor.name];
+    NSString *defaultsKey = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] dataForKey:defaultsKey];
 }
 
 NSString *paprefStringGetter(id self, SEL _cmd) {
-    NSString *selectorString = NSStringFromSelector(_cmd);
-    PAPropertyDescriptor *propertyDescriptor = _dynamicProperties[selectorString];
-    return [[NSUserDefaults standardUserDefaults] stringForKey:propertyDescriptor.name];
+    NSString *propertyDescriptorName = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] stringForKey:propertyDescriptorName];
 }
+
+NSDate *paprefDateGetter(id self, SEL _cmd) {
+    NSString *propertyDescriptorName = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] objectForKey:propertyDescriptorName];
+}
+
+NSNumber *paprefNumberGetter(id self, SEL _cmd) {
+    NSString *propertyDescriptorName = defaultsKeyForSelector(_cmd);
+    return [[self userDefaults] objectForKey:propertyDescriptorName];
+}
+
+id paprefCodableObjectGetter(id self, SEL _cmd) {
+    NSData *data = paprefDataGetter(self, _cmd);
+    return [NSKeyedUnarchiver unarchiveObjectWithData:data];
+}
+
+void paprefCodableObjectSetter(id self, SEL _cmd, id value) {
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:value];
+    paprefObjectSetter(self, _cmd, data);
+}
+
 
 @implementation PAPreferences
 
@@ -128,15 +181,21 @@ NSString *paprefStringGetter(id self, SEL _cmd) {
     return _sharedInstance;
 }
 
++ (NSString *)defaultsKeyForPropertyName:(NSString *)key {
+    return key;
+}
+
+
 - (instancetype)init {
     if (self = [super init]) {
+        _shouldAutomaticallySynchronize = YES;
         _dynamicProperties = [[NSMutableDictionary alloc] init];
         unsigned int cProps;
         objc_property_t *properties = class_copyPropertyList([self class], &cProps);
         for (int i=0; i<cProps; i++) {
             objc_property_t property = properties[i];
             NSString *name = [NSString stringWithUTF8String:property_getName(property)];
-            NSString *getterName = name;
+            NSString *getterName = [name copy];
             NSString *setterName = [NSString stringWithFormat:@"set%@%@:", [[name substringToIndex:1] capitalizedString], [name substringFromIndex:1]];
             NSString *type = nil;
             BOOL isDynamic = NO;
@@ -158,13 +217,14 @@ NSString *paprefStringGetter(id self, SEL _cmd) {
             }
             if (isDynamic) {
                 if (shouldRetain) {
-                    NSLog(@"Retained properties are not supported by PAPreferences, use assign instead");
+                    NSLog(@"Retained properties are not supported by PAPreferences, use assign instead.");
                 } else {
                     if ([self isValidType:type]) {
-                        _dynamicProperties[getterName] = [[PAPropertyDescriptor alloc] initWithName:name type:type isSetter:NO];
-                        _dynamicProperties[setterName] = [[PAPropertyDescriptor alloc] initWithName:name type:type isSetter:YES];
+                        NSString *defaultsKey = [[self class] defaultsKeyForPropertyName:name];
+                        _dynamicProperties[getterName] = [[PAPropertyDescriptor alloc] initWithDefaultsKey:defaultsKey type:type isSetter:NO];
+                        _dynamicProperties[setterName] = [[PAPropertyDescriptor alloc] initWithDefaultsKey:defaultsKey type:type isSetter:YES];
                     } else {
-                        NSLog(@"Type of %@ is not supported by PAPreferences", name);
+                        NSLog(@"Type of %@ is not supported by PAPreferences.", name);
                     }
                 }
             }
@@ -175,6 +235,20 @@ NSString *paprefStringGetter(id self, SEL _cmd) {
     }
     
     return self;
+}
+
+NS_INLINE NSString * classNameForTypeString(NSString *typeString) {
+    NSString *className = nil;
+    
+    if ([typeString hasPrefix:@"@\""] &&
+        [typeString hasSuffix:@"\""]) {
+        const NSUInteger prefixLength = 2;
+        const NSUInteger suffixLength = 1;
+        const NSUInteger classNameLength = typeString.length - suffixLength - prefixLength;
+        className = [typeString substringWithRange:NSMakeRange(prefixLength, classNameLength)];
+    }
+    
+    return className;
 }
 
 - (BOOL)isValidType:(NSString *)type {
@@ -194,13 +268,23 @@ NSString *paprefStringGetter(id self, SEL _cmd) {
             return YES;
             
         case _C_ID:
-            if ([type isEqualToString:@"@\"NSString\""] ||
-                [type isEqualToString:@"@\"NSArray\""] ||
-                [type isEqualToString:@"@\"NSDictionary\""] ||
-                [type isEqualToString:@"@\"NSData\""] ||
-                [type isEqualToString:@"@\"NSURL\""]) {
+        {
+            NSString *className = classNameForTypeString(type);
+            if ([className isEqualToString:@"NSString"] ||
+                [className isEqualToString:@"NSArray"] ||
+                [className isEqualToString:@"NSDictionary"] ||
+                [className isEqualToString:@"NSData"] ||
+                [className isEqualToString:@"NSDate"] ||
+                [className isEqualToString:@"NSNumber"] ||
+                [className isEqualToString:@"NSURL"]) {
                 return YES;
+            } else {
+                Class class = NSClassFromString(className);
+                if ([class conformsToProtocol:@protocol(NSCoding)]) {
+                    return YES;
+                }
             }
+        }
             
         default:
             return NO;
@@ -214,7 +298,8 @@ NSString *paprefStringGetter(id self, SEL _cmd) {
     if (propertyDescriptor) {
         IMP getter = 0;
         IMP setter = 0;
-        unichar typeIndicator = [propertyDescriptor.type characterAtIndex:0];
+        NSString *typeString = propertyDescriptor.type;
+        unichar typeIndicator = [typeString characterAtIndex:0];
         switch (typeIndicator) {
 #if __LP64__
             case _C_BOOL:
@@ -235,21 +320,36 @@ NSString *paprefStringGetter(id self, SEL _cmd) {
                 break;
                 
             case _C_ID:
+            {
                 getter = (IMP)paprefObjectGetter;
                 setter = (IMP)paprefObjectSetter;
-                if ([propertyDescriptor.type isEqualToString:@"@\"NSString\""]) {
-                    getter = (IMP)paprefStringGetter;
-                } else if ([propertyDescriptor.type isEqualToString:@"@\"NSArray\""]) {
-                    getter = (IMP)paprefArrayGetter;
-                } else if ([propertyDescriptor.type isEqualToString:@"@\"NSDictionary\""]) {
-                    getter = (IMP)paprefDictionaryGetter;
-                } else if ([propertyDescriptor.type isEqualToString:@"@\"NSData\""]) {
-                    getter = (IMP)paprefDataGetter;
-                } else if ([propertyDescriptor.type isEqualToString:@"@\"NSURL\""]) {
-                    getter = (IMP)paprefURLGetter;
-                    setter = (IMP)paprefURLSetter;
+                NSString *className = classNameForTypeString(typeString);
+                if (className != nil) {
+                    if ([className isEqualToString:@"NSString"]) {
+                        getter = (IMP)paprefStringGetter;
+                    } else if ([className isEqualToString:@"NSArray"]) {
+                        getter = (IMP)paprefArrayGetter;
+                    } else if ([className isEqualToString:@"NSDictionary"]) {
+                        getter = (IMP)paprefDictionaryGetter;
+                    } else if ([className isEqualToString:@"NSData"]) {
+                        getter = (IMP)paprefDataGetter;
+                    } else if ([className isEqualToString:@"NSDate"]) {
+                        getter = (IMP)paprefDateGetter;
+                    } else if ([className isEqualToString:@"NSNumber"]) {
+                        getter = (IMP)paprefNumberGetter;
+                    } else if ([className isEqualToString:@"NSURL"]) {
+                        getter = (IMP)paprefURLGetter;
+                        setter = (IMP)paprefURLSetter;
+                    } else {
+                        Class class = NSClassFromString(className);
+                        if ([class conformsToProtocol:@protocol(NSCoding)]) {
+                            getter = (IMP)paprefCodableObjectGetter;
+                            setter = (IMP)paprefCodableObjectSetter;
+                        }
+                    }
                 }
                 break;
+            }
                 
 #if __LP64__
             case _C_LNG_LNG:
@@ -280,7 +380,15 @@ NSString *paprefStringGetter(id self, SEL _cmd) {
 }
 
 - (BOOL)synchronize {
-    return [[NSUserDefaults standardUserDefaults] synchronize];
+    BOOL result = [[self userDefaults] synchronize];
+    if (!result) {
+        NSLog(@"Warning - Failed to synchronise user defaults, some of the data may be stale.");
+    }
+    return result;
+}
+
+- (NSUserDefaults *)userDefaults {
+    return [NSUserDefaults standardUserDefaults];
 }
 
 @end

@@ -64,9 +64,14 @@ PAPreferences supports the following property types:
  * NSDictionary
  * NSURL
  * NSData
+ * NSDate
+ * NSNumber
  * BOOL
  * float
  * double
+ * Classes conforming to the NSCoding protocol (including NSSecureCoding).
+
+While you can set mutable values for the properties, you will currently get immutable copies back. Just like when using NSUserDefaults directly.
 
 ## Updating UI when Preferences change
 
@@ -111,6 +116,23 @@ I prefer to set defaults in code, rather than using the traditional NSUserDefaul
         return self;
     }
 
+## Working with iOS Extensions
+
+To share settings between your host app and extension on iOS, you have to use an instance of NSUserDefaults created with `initWithSuiteName:` rather than `standardUserDefaults`. To support this, a subclass of PAPreferences can provide a `userDefaults` implementation of override the default. This is also a good way of caching the instance. Here's a sample implementation:
+
+```objective-c
+- (NSUserDefaults *)userDefaults {
+    static NSUserDefaults *_cachedDefaults;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        _cachedDefaults = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.peerassembly.myapp"];
+    });
+    
+    return _cachedDefaults;
+}
+```
+
+
 ## Samples
 
 The best examples of how to use the library are in the unit tests - `PAPreferencesTests.m`. However, there's a simple example preferences file also included in the iOS sample.
@@ -131,6 +153,21 @@ and
 
 ## Changelog
 
+### 0.5
+* Add the defaults keys to a userInfo dictionary that is passed to NSNotification when a property changes (thanks Jacob Rhoda)
+* Fix obscure crash in optimized code build (thanks YuanMing.Zhang)
+
+### 0.4
+ * Add ability to specify an instance of NSUserDefaults other than the standard one. This is important if you're sharing settings with an Extension on iOS
+ * Fix iOS sample so that unit tests could run on both iOS and OSX (previously, the tests failed on iOS because the initial view controller accessed the singleton before the test ran).
+
+### 0.3
+ * Added automatic synchronize call each time a property is updated (along with a flag to turn it off)
+ * Add support for NSDate and NSCoding
+ * Refactor getter & setter helper functions
+ 
+Thanks to @Janx2 and @creatd for pull requests.
+ 
 ### 0.2
  * Remove bogus warning for unsupported types
  
